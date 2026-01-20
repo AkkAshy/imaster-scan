@@ -73,7 +73,6 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
         }
 
         streamRef.current = stream;
-        setHasPermission(true);
 
         const tracks = stream.getVideoTracks();
         log(`Треков: ${tracks.length}`);
@@ -81,6 +80,12 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
           const settings = tracks[0].getSettings();
           log(`Разрешение: ${settings.width}x${settings.height}`);
         }
+
+        // Сначала показываем video элемент
+        setHasPermission(true);
+
+        // Ждём пока React отрендерит video элемент
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const video = videoRef.current;
         if (video) {
