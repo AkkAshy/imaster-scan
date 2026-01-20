@@ -5,6 +5,7 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
   const [hasPermission, setHasPermission] = useState(null);
   const [error, setError] = useState(null);
   const [isStarting, setIsStarting] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -29,13 +30,29 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
         setIsStarting(true);
         setError(null);
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
+        // Проверяем поддержку mediaDevices
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Браузер не поддерживает доступ к камере. Используйте HTTPS.');
+        }
+
+        // Пробуем получить доступ к камере
+        let stream;
+        try {
+          // Сначала пробуем заднюю камеру
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
+          });
+        } catch {
+          // Если не получилось — пробуем любую камеру
+          console.log('Задняя камера недоступна, пробуем любую...');
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true
+          });
+        }
 
         if (!mounted) {
           stream.getTracks().forEach(track => track.stop());
@@ -86,7 +103,20 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
         console.error('Ошибка камеры:', err);
         if (mounted) {
           setHasPermission(false);
-          setError(err.message || 'Не удалось получить доступ к камере');
+          // Понятные сообщения об ошибках
+          let errorMessage = 'Не удалось получить доступ к камере';
+          if (err.name === 'NotAllowedError') {
+            errorMessage = 'Доступ к камере запрещён. Разрешите доступ в настройках браузера.';
+          } else if (err.name === 'NotFoundError') {
+            errorMessage = 'Камера не найдена на устройстве.';
+          } else if (err.name === 'NotReadableError') {
+            errorMessage = 'Камера занята другим приложением.';
+          } else if (err.name === 'OverconstrainedError') {
+            errorMessage = 'Камера не поддерживает запрошенные параметры.';
+          } else if (err.name === 'SecurityError' || err.message?.includes('HTTPS')) {
+            errorMessage = 'Камера требует безопасное соединение (HTTPS).';
+          }
+          setError(errorMessage);
           setIsStarting(false);
           if (onScanError) onScanError(err);
         }
@@ -99,7 +129,14 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
       mounted = false;
       stopCamera();
     };
-  }, [onScanSuccess, onScanError, stopCamera]);
+  }, [onScanSuccess, onScanError, stopCamera, retryCount]);
+
+  const handleRetry = () => {
+    setHasPermission(null);
+    setError(null);
+    setIsStarting(true);
+    setRetryCount(c => c + 1);
+  };
 
   return (
     <div className="w-full h-full">
@@ -159,7 +196,13 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
           </div>
           <p className="font-semibold text-red-400 text-lg mb-2">Нет доступа к камере</p>
           <p className="text-sm text-red-400/70 mb-3">{error}</p>
-          <p className="text-xs text-slate-500">Разрешите доступ к камере в настройках браузера</p>
+          <p className="text-xs text-slate-500 mb-4">Разрешите доступ к камере в настройках браузера</p>
+          <button
+            onClick={handleRetry}
+            className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors"
+          >
+            Попробовать снова
+          </button>
         </div>
       )}
     </div>
