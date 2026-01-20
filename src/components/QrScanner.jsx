@@ -6,10 +6,16 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
   const [error, setError] = useState(null);
   const [isStarting, setIsStarting] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+  const [debugInfo, setDebugInfo] = useState('');
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const animationRef = useRef(null);
+
+  const log = (msg) => {
+    console.log('[QrScanner]', msg);
+    setDebugInfo(prev => prev + '\n' + msg);
+  };
 
   const stopCamera = useCallback(() => {
     if (animationRef.current) {
@@ -29,16 +35,20 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
       try {
         setIsStarting(true);
         setError(null);
+        setDebugInfo('Запуск камеры...');
 
         // Проверяем поддержку mediaDevices
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error('Браузер не поддерживает доступ к камере. Используйте HTTPS.');
         }
 
+        log('mediaDevices доступен');
+
         // Пробуем получить доступ к камере
         let stream;
         try {
           // Сначала пробуем заднюю камеру
+          log('Запрос задней камеры...');
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: { ideal: 'environment' },
@@ -46,12 +56,15 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
               height: { ideal: 720 }
             }
           });
-        } catch {
+          log('Задняя камера получена');
+        } catch (e) {
           // Если не получилось — пробуем любую камеру
-          console.log('Задняя камера недоступна, пробуем любую...');
+          log('Задняя камера недоступна: ' + e.message);
+          log('Пробуем любую камеру...');
           stream = await navigator.mediaDevices.getUserMedia({
             video: true
           });
+          log('Любая камера получена');
         }
 
         if (!mounted) {
@@ -62,22 +75,68 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
         streamRef.current = stream;
         setHasPermission(true);
 
+        const tracks = stream.getVideoTracks();
+        log(`Треков: ${tracks.length}`);
+        if (tracks.length > 0) {
+          const settings = tracks[0].getSettings();
+          log(`Разрешение: ${settings.width}x${settings.height}`);
+        }
+
         const video = videoRef.current;
         if (video) {
+          log('Привязка стрима к video...');
           video.srcObject = stream;
           video.setAttribute('playsinline', 'true');
-          await video.play();
+          video.setAttribute('autoplay', 'true');
+          video.setAttribute('muted', 'true');
+          video.muted = true;
+
+          // Ждём загрузки метаданных
+          await new Promise((resolve, reject) => {
+            video.onloadedmetadata = () => {
+              log(`Video metadata: ${video.videoWidth}x${video.videoHeight}`);
+              resolve();
+            };
+            video.onerror = (e) => {
+              log('Video error: ' + e.message);
+              reject(e);
+            };
+            // Таймаут на случай если событие не сработает
+            setTimeout(() => {
+              log('Metadata timeout, trying play anyway');
+              resolve();
+            }, 3000);
+          });
+
+          try {
+            await video.play();
+            log('Video play успешно');
+          } catch (playErr) {
+            log('Play error: ' + playErr.message);
+            // На некоторых браузерах нужно ждать user interaction
+          }
+
           setIsStarting(false);
 
           // Начинаем сканирование
           const canvas = canvasRef.current;
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
+          let scanCount = 0;
           const scan = () => {
-            if (!mounted || !video || video.readyState !== video.HAVE_ENOUGH_DATA) {
+            if (!mounted || !video) {
+              return;
+            }
+
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
               animationRef.current = requestAnimationFrame(scan);
               return;
             }
+
+            if (scanCount === 0) {
+              log(`Первый скан: video ${video.videoWidth}x${video.videoHeight}`);
+            }
+            scanCount++;
 
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -89,6 +148,7 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
             });
 
             if (code && code.data) {
+              log('QR найден: ' + code.data);
               stopCamera();
               if (onScanSuccess) onScanSuccess(code.data);
               return;
@@ -98,9 +158,12 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
           };
 
           scan();
+        } else {
+          log('videoRef.current is null!');
         }
       } catch (err) {
         console.error('Ошибка камеры:', err);
+        log('ОШИБКА: ' + err.name + ' - ' + err.message);
         if (mounted) {
           setHasPermission(false);
           // Понятные сообщения об ошибках
@@ -158,7 +221,9 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
             ref={videoRef}
             className="absolute inset-0 w-full h-full object-cover"
             playsInline
+            autoPlay
             muted
+            style={{ minHeight: '300px' }}
           />
 
           {/* Кастомная рамка */}
@@ -182,6 +247,13 @@ const QrScanner = ({ onScanSuccess, onScanError }) => {
               <span>Наведите камеру на QR код</span>
             </div>
           </div>
+
+          {/* Debug info (временно) */}
+          {debugInfo && (
+            <div className="absolute top-2 left-2 right-2 bg-black/70 text-xs text-green-400 font-mono p-2 rounded max-h-24 overflow-auto">
+              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
+            </div>
+          )}
         </div>
       )}
 
