@@ -80,9 +80,9 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
     <div className="tech-card overflow-hidden">
       {/* Заголовок с фото */}
       <div className="relative">
-        {equipment.photo ? (
+        {(equipment.photo_url || equipment.photo) ? (
           <img
-            src={equipment.photo}
+            src={equipment.photo_url || equipment.photo}
             alt={equipment.name}
             className="w-full h-48 object-cover"
           />
