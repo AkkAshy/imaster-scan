@@ -12,9 +12,15 @@ const api = axios.create({
 
 // Сканирование QR кода — поиск оборудования по ИНН или UID
 // Использует публичный эндпоинт (без авторизации), ищет по всем тенантам
+// Код передается через query параметр чтобы поддерживать слэши в ИНН
 export const scanEquipment = async (code) => {
   try {
-    const response = await api.get(`/inventory/public/scan/${code}/?expand=type,room,warehouse,author`);
+    const response = await api.get('/inventory/public/scan/', {
+      params: {
+        code: code,
+        expand: 'type,room,warehouse,author'
+      }
+    });
     return { success: true, data: response.data };
   } catch (error) {
     if (error.response?.status === 404) {
