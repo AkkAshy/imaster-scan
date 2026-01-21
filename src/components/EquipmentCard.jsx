@@ -23,18 +23,20 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
   };
   const typeName = getTypeName();
 
+  // Получаем информацию о комнате
+  const getRoom = () => {
+    if (typeof equipment.room === 'object' && equipment.room) {
+      return equipment.room;
+    }
+    return equipment.room_data;
+  };
+  const room = getRoom();
+
   // Получаем информацию о местоположении
   const getLocation = () => {
-    // Проверяем expand room
-    if (typeof equipment.room === 'object' && equipment.room) {
-      const num = equipment.room.number || '';
-      const name = equipment.room.name || '';
-      return `${num} ${name}`.trim() || 'Кабинет';
-    }
-    // Проверяем room_data
-    if (equipment.room_data) {
-      const num = equipment.room_data.number || '';
-      const name = equipment.room_data.name || '';
+    if (room) {
+      const num = room.number || '';
+      const name = room.name || '';
       return `${num} ${name}`.trim() || 'Кабинет';
     }
     // Проверяем expand warehouse
@@ -48,6 +50,12 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
     return 'Не указано';
   };
   const location = getLocation();
+
+  // Получаем название организации (тенанта)
+  const getTenantName = () => {
+    return equipment.tenant?.name || null;
+  };
+  const tenantName = getTenantName();
 
   // Получаем автора
   const getAuthor = () => {
@@ -97,10 +105,10 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
           </div>
         )}
 
-        {/* Статус */}
+        {/* Тип оборудования */}
         <div className="absolute top-3 right-3">
-          <span className={`status-badge ${status.class}`}>
-            {status.label}
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+            {typeName}
           </span>
         </div>
 
@@ -135,6 +143,22 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
           </div>
         </div>
 
+        {/* Организация */}
+        {tenantName && (
+          <div className="info-block flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Организация</p>
+              <p className="font-medium text-white">{tenantName}</p>
+            </div>
+          </div>
+        )}
+
         {/* Местоположение */}
         <div className="info-block flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
@@ -146,8 +170,29 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
             </svg>
           </div>
           <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wider">Местоположение</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Кабинет</p>
             <p className="font-medium text-white">{location}</p>
+            {room?.floor && (
+              <p className="text-xs text-slate-500">{room.floor}-й этаж</p>
+            )}
+          </div>
+        </div>
+
+        {/* Статус и активность */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="info-block p-3">
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Состояние</p>
+            <span className={`status-badge ${status.class}`}>{status.label}</span>
+          </div>
+          <div className="info-block p-3">
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Активность</p>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              equipment.is_active
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+            }`}>
+              {equipment.is_active ? 'Активно' : 'Неактивно'}
+            </span>
           </div>
         </div>
 
@@ -190,15 +235,36 @@ const EquipmentCard = ({ equipment, onScanAgain }) => {
           </div>
         )}
 
-        {/* Дата создания */}
-        <div className="pt-4 border-t border-slate-800 flex justify-between text-sm">
-          <span className="text-slate-500">
-            <span className="text-slate-600">Добавлено:</span> {formatDate(equipment.created_at)}
-          </span>
+        {/* QR код */}
+        {equipment.qr_code_url && (
+          <div className="flex justify-center py-4">
+            <div className="p-3 bg-white rounded-xl">
+              <img
+                src={equipment.qr_code_url}
+                alt="QR Code"
+                className="w-32 h-32"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Дата создания и автор */}
+        <div className="pt-4 border-t border-slate-800 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500">Добавлено</span>
+            <span className="text-slate-400">{formatDate(equipment.created_at)}</span>
+          </div>
           {author && (
-            <span className="text-slate-400">
-              {author.first_name} {author.last_name}
-            </span>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Автор</span>
+              <span className="text-slate-400">{author.first_name} {author.last_name}</span>
+            </div>
+          )}
+          {equipment.uid && (
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">UID</span>
+              <span className="text-slate-400 font-mono text-xs">{equipment.uid}</span>
+            </div>
           )}
         </div>
       </div>
